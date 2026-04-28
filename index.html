@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Design Excellence — Tenet Selection</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: sans-serif; background: #f9f9f9; display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 2rem 1rem; }
+    h1 { font-size: 18px; font-weight: 500; color: #333; margin-bottom: 4px; }
+    .subtitle { font-size: 13px; color: #888; margin-bottom: 6px; text-align: center; }
+    .sel-list { font-size: 13px; color: #888; min-height: 20px; margin: 4px 0 10px; text-align: center; }
+    #de-svg { display: block; margin: 0 auto; max-width: 580px; width: 100%; }
+    .actions { display: flex; align-items: center; gap: 12px; margin: 8px 0 16px; }
+    #de-btn { font-family: sans-serif; font-size: 14px; padding: 10px 32px; border: 1px solid #ccc; border-radius: 8px; background: #fff; color: #333; cursor: pointer; transition: background 0.15s; }
+    #de-btn:hover { background: #f0f0f0; }
+    #de-btn.committed { border-color: #2aad8f; color: #0d7a63; cursor: default; }
+    #de-edit { font-size: 12px; color: #888; cursor: pointer; text-decoration: underline; display: none; }
+    .result-box { display: none; font-size: 13px; background: #f0f0f0; border-radius: 8px; padding: 14px 20px; margin: 0 auto 16px; max-width: 520px; width: 100%; }
+    .result-box h3 { font-size: 13px; font-weight: 500; margin: 0 0 8px; color: #333; }
+    .result-tag { display: inline-block; margin: 3px 4px; padding: 3px 10px; border-radius: 20px; font-size: 12px; background: #fff; border: 0.5px solid #ccc; color: #333; }
+    .status-msg { font-size: 13px; margin-top: 8px; min-height: 20px; text-align: center; }
+    .status-msg.success { color: #0d7a63; }
+    .status-msg.error { color: #c0392b; }
+    .project-id { font-size: 12px; color: #aaa; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+
+  <h1>Design Excellence</h1>
+  <p class="subtitle">Click tenets to select or deselect. Select the ones that will guide your project's design.</p>
+  <div class="project-id" id="project-label"></div>
+  <div class="sel-list" id="de-sel">No tenets selected</div>
+
+  <svg id="de-svg" viewBox="0 0 580 580"></svg>
+
+  <div class="actions">
+    <button id="de-btn" onclick="deCommit()">Commit selections</button>
+    <span id="de-edit" onclick="deEdit()">Edit</span>
+  </div>
+
+  <div class="result-box" id="de-result">
+    <h3>Committed tenets</h3>
+    <div id="de-tags"></div>
+  </div>
+
+  <div class="status-msg" id="de-status"></div>
+
+  <script>
+  (function () {
+    var TENETS = [
+      { id: 0, label: ["Spirit of", "Place"],                  airtable: "Spirit of Place",                          angle: -90,  color: "#3a7fbf", sel: "#1a4f8a" },
+      { id: 1, label: ["Beauty &", "Delight"],                 airtable: "Beauty & Delight",                         angle: -54,  color: "#2aad8f", sel: "#0d6e5a" },
+      { id: 2, label: ["Health &", "Wellbeing"],               airtable: "Health & Wellbeing",                       angle: -18,  color: "#2ab89a", sel: "#0d7a63" },
+      { id: 3, label: ["Environmental", "Stewardship"],        airtable: "Environmental Stewardship",                angle: 18,   color: "#2aaa6e", sel: "#0d7048" },
+      { id: 4, label: ["Elevated", "Value"],                   airtable: "Elevated Value",                           angle: 54,   color: "#9ab527", sel: "#5e7210" },
+      { id: 5, label: ["Clarity of Concept,", "Form & Org."], airtable: "Clarity of Concept Form and Organization", angle: 90,   color: "#d4b800", sel: "#8a7800" },
+      { id: 6, label: ["Elegant Detail", "& Craft"],           airtable: "Elegant Detail & Craft",                   angle: 126,  color: "#e07b00", sel: "#9a5300" },
+      { id: 7, label: ["Community &", "Culture"],              airtable: "Community & Culture",                      angle: 162,  color: "#d94f1a", sel: "#9a3010" },
+      { id: 8, label: ["Resilient &", "Adaptable"],            airtable: "Resilient & Adaptable",                    angle: 198,  color: "#8b1a2a", sel: "#5a0f1a" },
+      { id: 9, label: ["Integration &", "Innovation"],         airtable: "Integration & Innovation",                 angle: 234,  color: "#5b3d9e", sel: "#3a2270" },
+    ];
+
+    var selected = {};
+    var committed = false;
+    var wbs1 = '';
+    var cx = 290, cy = 290, innerR = 105, outerR = 160, labelR = 192, segCount = 7, span = 30;
+    var NS = 'http://www.w3.org/2000/svg';
+
+    // Read WBS1 from URL
+    var params = new URLSearchParams(window.location.search);
+    wbs1 = params.get('WBS1') || params.get('wbs1') || '';
+    if (wbs1) {
+      document.getElementById('project-label').textContent = 'Project: ' + wbs1;
+    }
+
+    function r(d) { return d * Math.PI / 180; }
+
+    function arc(r1, r2, a1, a2) {
+      var s1 = r(a1), e1 = r(a2);
+      var x1 = cx + r1 * Math.cos(s1), y1 = cy + r1 * Math.sin(s1);
+      var x2 = cx + r2 * Math.cos(s1), y2 = cy + r2 * Math.sin(s1);
+      var x3 = cx + r2 * Math.cos(e1), y3 = cy + r2 * Math.sin(e1);
+      var x4 = cx + r1 * Math.cos(e1), y4 = cy + r1 * Math.sin(e1);
+      return 'M' + x1 + ',' + y1 + 'L' + x2 + ',' + y2 + 'A' + r2 + ',' + r2 + ' 0 0,1 ' + x3 + ',' + y3 + 'L' + x4 + ',' + y4 + 'A' + r1 + ',' + r1 + ' 0 0,0 ' + x1 + ',' + y1 + 'Z';
+    }
+
+    function mk(tag, attrs) {
+      var e = document.createElementNS(NS, tag);
+      for (var k in attrs) e.setAttribute(k, attrs[k]);
+      return e;
+    }
+
+    function build() {
+      var svg = document.getElementById('de-svg');
+      svg.innerHTML = '';
+
+      var ct = mk('text', { x: cx, y: cy - 8, 'text-anchor': 'middle', 'font-family': 'sans-serif', 'font-size': '15', 'font-weight': '700', 'letter-spacing': '1.5', fill: '#c0392b' });
+      ['DESIGN', 'EXCELLENCE'].forEach(function (w, i) {
+        var ts = mk('tspan', { x: cx, dy: i === 0 ? '0' : '20' });
+        ts.textContent = w;
+        ct.appendChild(ts);
+      });
+      svg.appendChild(ct);
+
+      TENETS.forEach(function (t) {
+        var a1 = t.angle - span / 2 + 1, a2 = t.angle + span / 2 - 1;
+        var isSel = !!selected[t.id];
+        var isGrey = committed && !isSel;
+        var segW = (outerR - innerR) / segCount;
+
+        var g = mk('g', {});
+        g.style.cursor = committed ? 'default' : 'pointer';
+        if (!committed) g.addEventListener('click', function () { toggle(t.id); });
+
+        for (var s = 0; s < segCount; s++) {
+          var r1 = innerR + s * segW + 1, r2 = innerR + (s + 1) * segW - 1;
+          var alpha = isGrey ? 0.12 : isSel ? 1 : (0.25 + (s / (segCount - 1)) * 0.6);
+          var p = mk('path', { d: arc(r1, r2, a1, a2), fill: isGrey ? '#aaa' : isSel ? t.sel : t.color });
+          p.style.opacity = alpha;
+          g.appendChild(p);
+        }
+
+        if (isSel) {
+          var ol = mk('path', { d: arc(innerR, outerR, a1, a2), fill: 'none', stroke: t.sel, 'stroke-width': '2.5' });
+          ol.style.opacity = '0.9';
+          g.appendChild(ol);
+        }
+        svg.appendChild(g);
+
+        var lx = cx + labelR * Math.cos(r(t.angle));
+        var ly = cy + labelR * Math.sin(r(t.angle));
+        var cos = Math.cos(r(t.angle));
+        var anchor = cos > 0.12 ? 'start' : cos < -0.12 ? 'end' : 'middle';
+
+        var lg = mk('g', {});
+        lg.style.cursor = committed ? 'default' : 'pointer';
+        if (!committed) lg.addEventListener('click', function () { toggle(t.id); });
+
+        var lineH = 16;
+        var startY = ly - (t.label.length * lineH) / 2 + lineH / 2 - 4;
+        t.label.forEach(function (line, li) {
+          var txt = mk('text', {
+            x: lx, y: startY + li * lineH,
+            'text-anchor': anchor,
+            'font-family': 'sans-serif',
+            'font-size': '12',
+            'font-weight': isSel ? '600' : '400',
+            fill: isGrey ? '#bbb' : isSel ? '#222' : '#888',
+            opacity: isGrey ? '0.5' : '1'
+          });
+          txt.textContent = line;
+          lg.appendChild(txt);
+        });
+
+        if (isSel) {
+          var uy = startY + t.label.length * lineH - 2;
+          var uw = 68;
+          var ux = anchor === 'end' ? lx - uw : anchor === 'start' ? lx : lx - uw / 2;
+          var ul = mk('line', { x1: ux, y1: uy, x2: ux + uw, y2: uy, stroke: t.sel, 'stroke-width': '1.5' });
+          lg.appendChild(ul);
+        }
+        svg.appendChild(lg);
+      });
+    }
+
+    function toggle(id) {
+      if (committed) return;
+      if (selected[id]) delete selected[id]; else selected[id] = true;
+      build();
+      updateSelList();
+    }
+
+    function updateSelList() {
+      var names = Object.keys(selected).map(function (id) { return TENETS[id].label.join(' '); });
+      document.getElementById('de-sel').textContent = names.length ? names.join('  ·  ') : 'No tenets selected';
+    }
+
+    window.deCommit = function () {
+      var ids = Object.keys(selected);
+      if (!ids.length) return;
+      if (!wbs1) {
+        document.getElementById('de-status').textContent = 'No project ID found in URL. Please open this page with ?WBS1=your-project-number';
+        document.getElementById('de-status').className = 'status-msg error';
+        return;
+      }
+
+      committed = true;
+      build();
+
+      var vals = ids.map(function (id) { return TENETS[id].airtable; });
+
+      var tags = document.getElementById('de-tags');
+      tags.innerHTML = '';
+      ids.forEach(function (id) {
+        var t = TENETS[id];
+        var tag = document.createElement('span');
+        tag.className = 'result-tag';
+        tag.style.borderLeft = '3px solid ' + t.sel;
+        tag.textContent = t.airtable;
+        tags.appendChild(tag);
+      });
+      document.getElementById('de-result').style.display = 'block';
+
+      var btn = document.getElementById('de-btn');
+      btn.textContent = '✓ ' + ids.length + ' tenet' + (ids.length > 1 ? 's' : '') + ' committed';
+      btn.classList.add('committed');
+      document.getElementById('de-edit').style.display = 'inline';
+
+      // Call Netlify function to write to Airtable
+      var status = document.getElementById('de-status');
+      status.textContent = 'Saving...';
+      status.className = 'status-msg';
+
+      fetch('/.netlify/functions/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wbs1: wbs1, tenants: vals })
+      })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data.success) {
+          status.textContent = '✓ Saved to project record.';
+          status.className = 'status-msg success';
+        } else {
+          status.textContent = 'Error saving: ' + (data.error || 'Unknown error');
+          status.className = 'status-msg error';
+        }
+      })
+      .catch(function (err) {
+        status.textContent = 'Network error — selections not saved. Please try again.';
+        status.className = 'status-msg error';
+      });
+    };
+
+    window.deEdit = function () {
+      committed = false;
+      document.getElementById('de-result').style.display = 'none';
+      document.getElementById('de-edit').style.display = 'none';
+      document.getElementById('de-status').textContent = '';
+      var btn = document.getElementById('de-btn');
+      btn.textContent = 'Commit selections';
+      btn.classList.remove('committed');
+      build();
+      updateSelList();
+    };
+
+    build();
+  })();
+  </script>
+</body>
+</html>
