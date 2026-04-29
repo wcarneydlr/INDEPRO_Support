@@ -23,9 +23,16 @@
     .status-msg.success { color: #0d7a63; }
     .status-msg.error { color: #c0392b; }
     .project-id { font-size: 12px; color: #aaa; margin-bottom: 12px; }
+    .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(249,249,249,0.85); display: flex; align-items: center; justify-content: center; z-index: 100; }
+    .loading-overlay.hidden { display: none; }
+    .loading-spinner { font-size: 13px; color: #888; }
   </style>
 </head>
 <body>
+
+  <div class="loading-overlay" id="loading-overlay">
+    <div class="loading-spinner">Loading project data...</div>
+  </div>
 
   <h1>Design Excellence</h1>
   <p class="subtitle">Click tenets to select or deselect. Select the ones that will guide your project's design.</p>
@@ -67,7 +74,6 @@
     var cx = 290, cy = 290, innerR = 105, outerR = 160, labelR = 192, segCount = 7, span = 30;
     var NS = 'http://www.w3.org/2000/svg';
 
-    // Read WBS1 from URL
     var params = new URLSearchParams(window.location.search);
     wbs1 = params.get('WBS1') || params.get('wbs1') || '';
     if (wbs1) {
@@ -176,19 +182,10 @@
       document.getElementById('de-sel').textContent = names.length ? names.join('  ·  ') : 'No tenets selected';
     }
 
-    window.deCommit = function () {
+    function showCommittedState(label) {
       var ids = Object.keys(selected);
-      if (!ids.length) return;
-      if (!wbs1) {
-        document.getElementById('de-status').textContent = 'No project ID found in URL. Please open this page with ?WBS1=your-project-number';
-        document.getElementById('de-status').className = 'status-msg error';
-        return;
-      }
-
       committed = true;
       build();
-
-      var vals = ids.map(function (id) { return TENETS[id].airtable; });
 
       var tags = document.getElementById('de-tags');
       tags.innerHTML = '';
@@ -200,14 +197,57 @@
         tag.textContent = t.airtable;
         tags.appendChild(tag);
       });
-      document.getElementById('de-result').style.display = 'block';
+      document.getElementById('de-result').style.display = ids.length ? 'block' : 'none';
 
       var btn = document.getElementById('de-btn');
-      btn.textContent = '✓ ' + ids.length + ' tenet' + (ids.length > 1 ? 's' : '') + ' committed';
+      btn.textContent = label || ('✓ ' + ids.length + ' tenet' + (ids.length > 1 ? 's' : '') + ' committed');
       btn.classList.add('committed');
       document.getElementById('de-edit').style.display = 'inline';
+    }
 
-      // Call Netlify function to write to Airtable
+    function loadExisting() {
+      if (!wbs1) {
+        document.getElementById('loading-overlay').classList.add('hidden');
+        build();
+        return;
+      }
+
+      fetch('/.netlify/functions/get?wbs1=' + encodeURIComponent(wbs1))
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          if (data.tenants && data.tenants.length > 0) {
+            data.tenants.forEach(function (name) {
+              TENETS.forEach(function (t) {
+                if (t.airtable === name) selected[t.id] = true;
+              });
+            });
+            updateSelList();
+            showCommittedState(data.tenants.length + ' tenet' + (data.tenants.length > 1 ? 's' : '') + ' previously saved');
+            document.getElementById('de-status').textContent = 'Showing previously saved selections. Click Edit to change.';
+            document.getElementById('de-status').className = 'status-msg success';
+          } else {
+            build();
+          }
+          document.getElementById('loading-overlay').classList.add('hidden');
+        })
+        .catch(function () {
+          build();
+          document.getElementById('loading-overlay').classList.add('hidden');
+        });
+    }
+
+    window.deCommit = function () {
+      var ids = Object.keys(selected);
+      if (!ids.length) return;
+      if (!wbs1) {
+        document.getElementById('de-status').textContent = 'No project ID found in URL. Please open this page with ?WBS1=your-project-number';
+        document.getElementById('de-status').className = 'status-msg error';
+        return;
+      }
+
+      var vals = ids.map(function (id) { return TENETS[id].airtable; });
+      showCommittedState();
+
       var status = document.getElementById('de-status');
       status.textContent = 'Saving...';
       status.className = 'status-msg';
@@ -227,7 +267,7 @@
           status.className = 'status-msg error';
         }
       })
-      .catch(function (err) {
+      .catch(function () {
         status.textContent = 'Network error — selections not saved. Please try again.';
         status.className = 'status-msg error';
       });
@@ -245,7 +285,7 @@
       updateSelList();
     };
 
-    build();
+    loadExisting();
   })();
   </script>
 </body>
