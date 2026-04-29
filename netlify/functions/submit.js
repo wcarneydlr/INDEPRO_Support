@@ -8,7 +8,7 @@ exports.handler = async function (event) {
   var tableId = 'tbljHWjTh5U4L6mCY';
 
   if (!token) {
-    return { statusCode: 500, body: JSON.stringify({ error: 'Missing AIRTABLE_TOKEN environment variable' }) };
+    return { statusCode: 500, body: JSON.stringify({ error: 'AIRTABLE_TOKEN env var is missing' }) };
   }
 
   var body;
@@ -32,16 +32,32 @@ exports.handler = async function (event) {
   };
 
   try {
-    // Search for existing record matching WBS1
     var searchUrl = airtableBase + '?filterByFormula=' + encodeURIComponent('{WBS1}="' + wbs1 + '"') + '&maxRecords=1';
     var searchRes = await fetch(searchUrl, { headers: headers });
-    var searchData = await searchRes.json();
+    var searchText = await searchRes.text();
+
+    var searchData;
+    try {
+      searchData = JSON.parse(searchText);
+    } catch(e) {
+      return { statusCode: 500, body: JSON.stringify({ error: 'Airtable response not JSON: ' + searchText }) };
+    }
+
+    if (searchData.error) {
+      return {
+        statusCode: 500,
+        body: JSON.stringify({
+          error: 'Search error: ' + JSON.stringify(searchData.error),
+          tokenLength: token.length,
+          tokenStart: token.substring(0, 8)
+        })
+      };
+    }
 
     var fields = { Tenants: tenants };
     var res, data;
 
     if (searchData.records && searchData.records.length > 0) {
-      // Update existing record (last-write-wins)
       var recordId = searchData.records[0].id;
       res = await fetch(airtableBase + '/' + recordId, {
         method: 'PATCH',
@@ -49,7 +65,6 @@ exports.handler = async function (event) {
         body: JSON.stringify({ fields: fields })
       });
     } else {
-      // Create new record
       fields.WBS1 = wbs1;
       res = await fetch(airtableBase, {
         method: 'POST',
@@ -58,10 +73,15 @@ exports.handler = async function (event) {
       });
     }
 
-    data = await res.json();
+    var resText = await res.text();
+    try {
+      data = JSON.parse(resText);
+    } catch(e) {
+      return { statusCode: 500, body: JSON.stringify({ error: 'Write response not JSON: ' + resText }) };
+    }
 
     if (data.error) {
-      return { statusCode: 500, body: JSON.stringify({ error: data.error.message || 'Airtable error' }) };
+      return { statusCode: 500, body: JSON.stringify({ error: data.error.message || JSON.stringify(data.error) }) };
     }
 
     return {
