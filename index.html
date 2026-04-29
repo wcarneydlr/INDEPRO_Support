@@ -212,7 +212,7 @@
         return;
       }
 
-      fetch('/.netlify/functions/get?wbs1=' + encodeURIComponent(wbs1))
+      fetch('https://indeprosupport.netlify.app/.netlify/functions/get?wbs1=' + encodeURIComponent(wbs1))
         .then(function (res) { return res.json(); })
         .then(function (data) {
           if (data.tenants && data.tenants.length > 0) {
@@ -252,7 +252,7 @@
       status.textContent = 'Saving...';
       status.className = 'status-msg';
 
-      fetch('/.netlify/functions/submit', {
+      fetch('https://indeprosupport.netlify.app/.netlify/functions/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ wbs1: wbs1, tenants: vals })
